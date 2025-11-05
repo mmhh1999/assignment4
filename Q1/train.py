@@ -31,10 +31,10 @@ def setup_optimizer(gaussians):
     gaussians.check_if_trainable()
 
     parameters = [
-        {'params': [gaussians.pre_act_opacities], 'lr': 1e-2, "name": "opacities"},
-        {'params': [gaussians.pre_act_scales], 'lr': 5e-3, "name": "scales"},
-        {'params': [gaussians.colours], 'lr': 1e-2, "name": "colours"},
-        {'params': [gaussians.means], 'lr': 1e-3, "name": "means"},
+        {'params': [gaussians.means],             'lr': 1e-4, "name": "means"},
+        {'params': [gaussians.pre_act_scales],    'lr': 2e-3, "name": "scales"},
+        {'params': [gaussians.colours],           'lr': 5e-3, "name": "colours"},
+        {'params': [gaussians.pre_act_opacities], 'lr': 5e-3, "name": "opacities"},
     ]
 
     # Use smaller global lr (lr here is overridden by per-group lr)
@@ -80,9 +80,18 @@ def run_training(args):
     )
     scene = Scene(gaussians)
 
+    with torch.no_grad():
+        gaussians.pre_act_opacities.data.fill_(2.0)  # make opacity unsaturated for better gradients
+
     # Making gaussians trainable and setting up optimizer
     make_trainable(gaussians)
     optimizer = setup_optimizer(gaussians)
+
+    # after optimizer = setup_optimizer(gaussians)
+    from torch.optim.lr_scheduler import CosineAnnealingLR
+
+    # T_max: total training iterations; eta_min: final min LR
+    scheduler = CosineAnnealingLR(optimizer, T_max=args.num_itrs, eta_min=1e-5)
 
     # Training loop
     viz_frames = []
@@ -121,6 +130,7 @@ def run_training(args):
 
         loss.backward()
         optimizer.step()
+        scheduler.step()  
         optimizer.zero_grad()
 
         print(f"[*] Itr: {itr:07d} | Loss: {loss:0.6f}")

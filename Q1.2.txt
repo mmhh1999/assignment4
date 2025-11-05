@@ -1,4 +1,4 @@
-🧩 Q1.2 Training 3D Gaussian Representations
+🧩 Q1.2 Training 3D Gaussian Representations try1
 
 Training Configuration (Recorded):
 
@@ -14,3 +14,28 @@ Learning rates	means: 0.001, scales: 0.01, colours: 0.01, opacities: 0.05
 Gaussian type	isotropic
 Background color	(0.0, 0.0, 0.0)
 Loss function	L1 loss (torch.nn.L1Loss)
+
+[*] Evaluation --- Mean PSNR: 19.055
+[*] Evaluation --- Mean SSIM: 0.758
+
+Try 2
+
+Parameter	Value
+Data path	./data/truck
+Output path	./output_truck_run1 (示例；请用你实际 out_path)
+Device	cuda
+Number of iterations	4000
+Visualization frequency	100
+Gaussians per splat	15000 (可视显存调节)
+Gaussian type	isotropic
+Image size used for rendering	train_dataset.img_size (与数据一致)
+Background color	(0.0, 0.0, 0.0)
+Loss function	Masked L1（若提供 gt_mask：`mean(
+Opacity init	pre_act_opacities ← 2.0（避免 sigmoid 饱和）
+Log-scale clamp (each iter)	log_scale ∈ [ln(1e-3), ln(0.1)]
+Optimizer	Adam（eps=1e-15）
+Learning rates (per group)	means: 1e-4, scales: 2e-3, colours: 5e-3, opacities: 5e-3
+LR scheduler	CosineAnnealingLR(T_max = num_itrs, eta_min = 1e-5)
+
+[*] Evaluation --- Mean PSNR: 19.011
+[*] Evaluation --- Mean SSIM: 0.790
