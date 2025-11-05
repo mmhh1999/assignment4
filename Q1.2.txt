@@ -1,0 +1,16 @@
+🧩 Q1.2 Training 3D Gaussian Representations
+
+Training Configuration (Recorded):
+
+Parameter	Value
+Data path	./data/truck
+Output path	./output
+Device	cuda
+Number of iterations	2000
+Visualization frequency	100
+Gaussians per splat	15000
+Optimizer	Adam
+Learning rates	means: 0.001, scales: 0.01, colours: 0.01, opacities: 0.05
+Gaussian type	isotropic
+Background color	(0.0, 0.0, 0.0)
+Loss function	L1 loss (torch.nn.L1Loss)

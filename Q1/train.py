@@ -12,31 +12,36 @@ from data_utils import TruckDataset, visualize_renders
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
 def make_trainable(gaussians):
-
-    ### YOUR CODE HERE ###
-    # HINT: You can access and modify parameters from gaussians
-    pass
+    """
+    Set trainable flags for isotropic Gaussians.
+    In isotropic mode, scales are (N,1) and quaternions are not optimized.
+    """
+    gaussians.means = gaussians.means.detach().requires_grad_(True)
+    gaussians.pre_act_scales = gaussians.pre_act_scales.detach().requires_grad_(True)  # (N,1)
+    gaussians.colours = gaussians.colours.detach().requires_grad_(True)
+    gaussians.pre_act_opacities = gaussians.pre_act_opacities.detach().requires_grad_(True)
+    # Do NOT train quaternions in isotropic mode
+    return gaussians
 
 def setup_optimizer(gaussians):
-
+    """
+    Setup Adam optimizer with different learning rates for each parameter group.
+    Smaller LR for means; larger for opacities and colours.
+    """
     gaussians.check_if_trainable()
 
-    ### YOUR CODE HERE ###
-    # HINT: Modify the learning rates to reasonable values. We have intentionally
-    # set very high learning rates for all parameters.
-    # HINT: Consider reducing the learning rates for parameters that seem to vary too
-    # fast with the default settings.
-    # HINT: Consider setting different learning rates for different sets of parameters.
     parameters = [
-        {'params': [gaussians.pre_act_opacities], 'lr': 0.05, "name": "opacities"},
-        {'params': [gaussians.pre_act_scales], 'lr': 0.05, "name": "scales"},
-        {'params': [gaussians.colours], 'lr': 0.05, "name": "colours"},
-        {'params': [gaussians.means], 'lr': 0.05, "name": "means"},
+        {'params': [gaussians.pre_act_opacities], 'lr': 1e-2, "name": "opacities"},
+        {'params': [gaussians.pre_act_scales], 'lr': 5e-3, "name": "scales"},
+        {'params': [gaussians.colours], 'lr': 1e-2, "name": "colours"},
+        {'params': [gaussians.means], 'lr': 1e-3, "name": "means"},
     ]
-    optimizer = torch.optim.Adam(parameters, lr=0.0, eps=1e-15)
-    optimizer = None
+
+    # Use smaller global lr (lr here is overridden by per-group lr)
+    optimizer = torch.optim.Adam(parameters, eps=1e-15)
 
     return optimizer
+
 
 def run_training(args):
 
@@ -98,24 +103,27 @@ def run_training(args):
             gt_mask = gt_mask[0].cuda()
 
         # Rendering scene using gaussian splatting
-        ### YOUR CODE HERE ###
-        # HINT: Can any function from the Scene class help?
-        # HINT: Set bg_colour to (0.0, 0.0, 0.0)
-        # HINT: Get img_size from train_dataset
-        # HINT: Get per_splat from args.gaussians_per_splat
-        # HINT: camera is available above
-        pred_img = None
+        # Use Scene.render to get predicted RGB
+        pred_img, pred_depth, pred_mask = scene.render(
+            camera=camera,
+            per_splat=args.gaussians_per_splat,
+            img_size=train_dataset.img_size,   # (W, H)
+            bg_colour=(0.0, 0.0, 0.0)
+        )
 
         # Compute loss
-        ### YOUR CODE HERE ###
-        # HINT: A simple standard loss function should work.
-        loss = None
+        # L1 loss; if mask is provided, compute masked L1
+        if gt_mask is not None:
+            # gt_mask likely shaped (H, W, 1); broadcast over channels
+            loss = torch.mean(torch.abs(pred_img - gt_img) * gt_mask)
+        else:
+            loss = torch.nn.functional.l1_loss(pred_img, gt_img)
 
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
 
-        print(f"[*] Itr: {itr:07d} | Loss: {loss:0.3f}")
+        print(f"[*] Itr: {itr:07d} | Loss: {loss:0.6f}")
 
         if itr % args.viz_freq == 0:
             viz_frame = visualize_renders(
@@ -143,15 +151,13 @@ def run_training(args):
             gt_mask = gt_mask[0].cuda()
 
         with torch.no_grad():
-
             # Rendering scene using gaussian splatting
-            ### YOUR CODE HERE ###
-            # HINT: Can any function from the Scene class help?
-            # HINT: Set bg_colour to (0.0, 0.0, 0.0)
-            # HINT: Get img_size from train_dataset
-            # HINT: Get per_splat from args.gaussians_per_splat
-            # HINT: camera is available above
-            pred_img = None
+            pred_img, pred_depth, pred_mask = scene.render(
+                camera=camera,
+                per_splat=args.gaussians_per_splat,
+                img_size=train_dataset.img_size,
+                bg_colour=(0.0, 0.0, 0.0)
+            )
 
         pred_npy = pred_img.detach().cpu().numpy()
         pred_npy = (np.clip(pred_npy, 0.0, 1.0) * 255.0).astype(np.uint8)
@@ -171,15 +177,13 @@ def run_training(args):
             gt_mask = gt_mask[0].cuda()
 
         with torch.no_grad():
-
             # Rendering scene using gaussian splatting
-            ### YOUR CODE HERE ###
-            # HINT: Can any function from the Scene class help?
-            # HINT: Set bg_colour to (0.0, 0.0, 0.0)
-            # HINT: Get img_size from test_dataset
-            # HINT: Get per_splat from args.gaussians_per_splat
-            # HINT: camera is available above
-            pred_img = None
+            pred_img, pred_depth, pred_mask = scene.render(
+                camera=camera,
+                per_splat=args.gaussians_per_splat,
+                img_size=test_dataset.img_size,
+                bg_colour=(0.0, 0.0, 0.0)
+            )
 
             gt_npy = gt_img.detach().cpu().numpy()
             pred_npy = pred_img.detach().cpu().numpy()
@@ -193,6 +197,7 @@ def run_training(args):
     mean_ssim = np.mean(ssim_vals)
     print(f"[*] Evaluation --- Mean PSNR: {mean_psnr:.3f}")
     print(f"[*] Evaluation --- Mean SSIM: {mean_ssim:.3f}")
+
 
 def get_args():
 

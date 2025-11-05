@@ -195,20 +195,39 @@ def load_gaussians_from_ply(path):
 
 def colours_from_spherical_harmonics(spherical_harmonics, gaussian_dirs):
     """
-    [Q 1.3.1] Computes view-dependent colour given spherical harmonic coefficients
-    and direction vectors for each gaussian.
+    [Q 1.3.1] Computes view-dependent color from SH coefficients and directions.
 
     Args:
-        spherical_harmonics     :   A torch.Tensor of shape (N, 48) representing the
-                                    spherical harmonic coefficients.
-        gaussian_dirs           :   A torch.Tensor of shape (N, 3) representing the
-                                    direction vectors pointing from the camera origin
-                                    to each Gaussian.
+        spherical_harmonics: torch.Tensor of shape (N, 48)
+            Layout matches this file's loader:
+              - first 3 numbers are DC for (R,G,B)
+              - remaining 45 numbers are 15 higher-order bases × 3 channels,
+                flattened in (basis-major, then channels) order.
+        gaussian_dirs: torch.Tensor of shape (N, 3)
+            World-space unit directions from camera center to Gaussian means.
 
     Returns:
-        colours                 :   A torch.Tensor of shape (N, 3) representing the view dependent
-                                    RGB colour.
+        colours: torch.Tensor of shape (N, 3) in [0,1]
     """
-    ### YOUR CODE HERE ###
-    colours = None
+    if spherical_harmonics.dim() != 2 or spherical_harmonics.shape[1] != 48:
+        raise ValueError(f"Expected SH of shape (N, 48), got {tuple(spherical_harmonics.shape)}")
+
+    # Ensure tensor types/placement match directions
+    device = gaussian_dirs.device
+    sh = spherical_harmonics.to(device=device, dtype=gaussian_dirs.dtype)
+
+    # Reshape to (N, 16, 3): first basis = DC(3), then 15 bases × 3 channels
+    dc = sh[:, :3]                               # (N,3)
+    rest = sh[:, 3:].view(-1, 15, 3)             # (N,15,3)
+    sh_16x3 = torch.cat([dc.unsqueeze(1), rest], dim=1)  # (N,16,3)
+
+    # Evaluate SH bases (N,16)
+    bases = _eval_sh_bases_deg3(gaussian_dirs)   # (N,16)
+
+    # Linear combination per channel: sum_b sh[n,b,c] * Y_b(dir_n)
+    colours = torch.einsum('nbc,nb->nc', sh_16x3, bases)  # (N,3)
+
+    # Add 0.5 bias (consistent with DC-only path: dc*SH_C0 + 0.5) and clamp
+    colours = torch.clamp(colours + 0.5, 0.0, 1.0)
+
     return colours
