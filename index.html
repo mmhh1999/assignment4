@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Assignment 4 — Q1.1 3D Gaussian Rasterization</title>
+<style>
+  body{margin:0;background:#0b0c0f;color:#e7ecf3;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
+  .wrap{max-width:960px;margin:32px auto;padding:0 16px}
+  h1{font-size:28px;margin:0 0 8px}
+  h2{font-size:22px;margin:22px 0 10px}
+  section{background:#141720;border:1px solid #222733;border-radius:14px;padding:18px;margin:18px 0}
+  .muted{color:#9aa3b2}
+  figure{margin:0;background:#0e1117;border:1px solid #222733;border-radius:10px;padding:8px}
+  figcaption{color:#9aa3b2;font-size:13px;margin-top:6px}
+  code,pre{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0e1117;border:1px solid #222733;border-radius:10px;padding:8px}
+  ul{margin:8px 0 0 20px}
+  .kpi{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+  .tag{border:1px solid #2d3646;background:#0e1117;border-radius:999px;padding:6px 10px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Q1.1 — 3D Gaussian Rasterization (Completed Section)</h1>
+    <div class="muted">Name / Andrew ID: __________________</div>
+  </header>
+
+  <section>
+    <h2>Implementation Summary</h2>
+    <ul>
+      <li><code>model.py</code>: Implemented 
+        <code>compute_cov_3D</code>, <code>compute_cov_2D</code>, 
+        <code>compute_means_2D</code>, <code>evaluate_gaussian_2D</code>, 
+        <code>compute_alphas</code>, <code>compute_transmittance</code>, and <code>splat</code>.
+      </li>
+      <li>Projection uses an explicit pinhole camera model (extrinsics for world→view, intrinsics for focal length &amp; principal point).</li>
+      <li>Depth sorting and filtering (<code>z &gt; 0</code>) implemented before splatting.</li>
+      <li><code>render.py</code>: Completed <code>create_renders()</code> to call <code>Scene.render()</code> and generate frame images + GIF.</li>
+    </ul>
+    <div class="kpi">
+      <span class="tag">img_dim: 256</span>
+      <span class="tag">gaussians_per_splat: 15000</span>
+      <span class="tag">GPU: A10G (g5.xlarge)</span>
+      <span class="tag">VRAM usage: ~6 GB</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Command Used</h2>
+    <pre>cd Q1
+python render.py --data_path ./data/chair.ply --out_path ./output --device cuda --gaussians_per_splat 15000</pre>
+    <p class="muted">Outputs are saved under <code>./output/q1_render/</code> (individual frames) and <code>./output/q1_render.gif</code> (final animation).</p>
+  </section>
+
+  <section>
+    <h2>Rendered Result</h2>
+    <figure>
+      <img src="Q1/output/q1_render.gif" alt="Q1 Rendering Result" style="width:100%;height:auto" />
+      <figcaption>Rendered multi-view visualization of pre-trained 3D Gaussians (chair).</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Environment &amp; Dependencies</h2>
+    <ul>
+      <li>Instance: AWS g5.xlarge (NVIDIA A10G, 24 GB)</li>
+      <li>CUDA: 12.x; PyTorch: 2.3+ (CUDA 12.1 build); PyTorch3D built from source</li>
+      <li>Main packages: <code>torch</code>, <code>pytorch3d</code>, <code>imageio</code>, <code>Pillow</code>, <code>tqdm</code></li>
+    </ul>
+  </section>
+
+</div>
+</body>
+</html>
