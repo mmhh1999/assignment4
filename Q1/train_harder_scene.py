@@ -15,34 +15,36 @@ from pytorch3d.renderer import PerspectiveCameras
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
 def make_trainable(gaussians):
+    """
+    Enable gradients for isotropic Gaussians.
+    In isotropic mode we optimize: means, pre_act_scales (N,1), colours, pre_act_opacities.
+    Quaternions are not trained for isotropic Gaussians.
+    """
+    gaussians.means = gaussians.means.detach().requires_grad_(True)
+    gaussians.pre_act_scales = gaussians.pre_act_scales.detach().requires_grad_(True)
+    gaussians.colours = gaussians.colours.detach().requires_grad_(True)
+    gaussians.pre_act_opacities = gaussians.pre_act_opacities.detach().requires_grad_(True)
+    # For anisotropic case you would also enable quaternions, but not needed here.
 
-    ### YOUR CODE HERE ###
-    # HINT: You can access and modify parameters from gaussians
-    pass
 
 def setup_optimizer(gaussians):
-
+    """
+    Adam with per-parameter-group learning rates.
+    Use smaller LR for means; larger for colours/opacities; moderate for scales.
+    """
     gaussians.check_if_trainable()
 
-    ### YOUR CODE HERE ###
-    # HINT: Modify the learning rates to reasonable values. We have intentionally
-    # set very high learning rates for all parameters.
-    # HINT: Consider reducing the learning rates for parameters that seem to vary too
-    # fast with the default settings.
-    # HINT: Consider setting different learning rates for different sets of parameters.
     parameters = [
-        {'params': [gaussians.pre_act_opacities], 'lr': 0.05, "name": "opacities"},
-        {'params': [gaussians.pre_act_scales], 'lr': 0.05, "name": "scales"},
-        {'params': [gaussians.colours], 'lr': 0.05, "name": "colours"},
-        {'params': [gaussians.means], 'lr': 0.05, "name": "means"},
+        {'params': [gaussians.means], 'lr': 1e-4, "name": "means"},
+        {'params': [gaussians.pre_act_scales], 'lr': 2e-3, "name": "scales"},
+        {'params': [gaussians.colours], 'lr': 5e-3, "name": "colours"},
+        {'params': [gaussians.pre_act_opacities], 'lr': 5e-3, "name": "opacities"},
     ]
-    optimizer = torch.optim.Adam(parameters, lr=0.0, eps=1e-15)
-    optimizer = None
-
+    optimizer = torch.optim.Adam(parameters, eps=1e-15)
     return optimizer
 
-def ndc_to_screen_camera(camera, img_size = (128, 128)):
 
+def ndc_to_screen_camera(camera, img_size = (128, 128)):
     min_size = min(img_size[0], img_size[1])
 
     screen_focal = camera.focal_length * min_size / 2.0
@@ -92,6 +94,10 @@ def run_training(args):
     )
     scene = Scene(gaussians)
 
+    # Optional: make initial opacities less saturated to improve gradients
+    with torch.no_grad():
+        gaussians.pre_act_opacities.data.fill_(2.0)  # sigmoid(2) ~ 0.88
+
     # Making gaussians trainable and setting up optimizer
     make_trainable(gaussians)
     optimizer = setup_optimizer(gaussians)
@@ -111,23 +117,22 @@ def run_training(args):
         camera = ndc_to_screen_camera(data[0]["camera"]).cuda()
 
         # Rendering scene using gaussian splatting
-        ### YOUR CODE HERE ###
-        # HINT: Can any function from the Scene class help?
-        # HINT: Set bg_colour to (0.0, 0.0, 0.0)
-        # HINT: Set img_size to (128, 128)
-        # HINT: Get per_splat from args.gaussians_per_splat
-        # HINT: camera is available above
-        pred_img = None
+        # Use Scene.render to get predicted RGB at 128x128 with black background
+        pred_img, pred_depth, pred_mask = scene.render(
+            camera=camera,
+            per_splat=args.gaussians_per_splat,
+            img_size=(128, 128),
+            bg_colour=(0.0, 0.0, 0.0)
+        )
 
-        # Compute loss
-        ### YOUR CODE HERE ###
-        loss = None
+        # Compute loss (simple L1)
+        loss = torch.nn.functional.l1_loss(pred_img, gt_img)
 
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
 
-        print(f"[*] Itr: {itr:07d} | Loss: {loss:0.3f}")
+        print(f"[*] Itr: {itr:07d} | Loss: {loss:0.6f}")
 
         if itr % args.viz_freq == 0:
             viz_frame = visualize_renders(
@@ -136,7 +141,7 @@ def run_training(args):
             )
             viz_frames.append(viz_frame)
 
-    print("[*] Training Completed.")
+    print("[*] Training Completed.]")
 
     # Saving training progess GIF
     imageio.mimwrite(viz_gif_path_1, viz_frames, loop=0, duration=(1/10.0)*1000)
@@ -152,15 +157,13 @@ def run_training(args):
         camera = ndc_to_screen_camera(viz_data[0]["camera"]).cuda()
 
         with torch.no_grad():
-
             # Rendering scene using gaussian splatting
-            ### YOUR CODE HERE ###
-            # HINT: Can any function from the Scene class help?
-            # HINT: Set bg_colour to (0.0, 0.0, 0.0)
-            # HINT: Set img_size to (128, 128)
-            # HINT: Get per_splat from args.gaussians_per_splat
-            # HINT: camera is available above
-            pred_img = None
+            pred_img, pred_depth, pred_mask = scene.render(
+                camera=camera,
+                per_splat=args.gaussians_per_splat,
+                img_size=(128, 128),
+                bg_colour=(0.0, 0.0, 0.0)
+            )
 
         pred_npy = pred_img.detach().cpu().numpy()
         pred_npy = (np.clip(pred_npy, 0.0, 1.0) * 255.0).astype(np.uint8)
@@ -177,16 +180,13 @@ def run_training(args):
         camera = ndc_to_screen_camera(val_data[0]["camera"]).cuda()
 
         with torch.no_grad():
-
             # Rendering scene using gaussian splatting
-            # Rendering scene using gaussian splatting
-            ### YOUR CODE HERE ###
-            # HINT: Can any function from the Scene class help?
-            # HINT: Set bg_colour to (0.0, 0.0, 0.0)
-            # HINT: Set img_size to (128, 128)
-            # HINT: Get per_splat from args.gaussians_per_splat
-            # HINT: camera is available above
-            pred_img = None
+            pred_img, pred_depth, pred_mask = scene.render(
+                camera=camera,
+                per_splat=args.gaussians_per_splat,
+                img_size=(128, 128),
+                bg_colour=(0.0, 0.0, 0.0)
+            )
 
             gt_npy = gt_img.detach().cpu().numpy()
             pred_npy = pred_img.detach().cpu().numpy()
