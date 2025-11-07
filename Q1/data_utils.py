@@ -211,6 +211,75 @@ def colours_from_spherical_harmonics(spherical_harmonics, gaussian_dirs):
     """
     if spherical_harmonics.dim() != 2 or spherical_harmonics.shape[1] != 48:
         raise ValueError(f"Expected SH of shape (N, 48), got {tuple(spherical_harmonics.shape)}")
+    if gaussian_dirs.dim() != 2 or gaussian_dirs.shape[1] != 3:
+        raise ValueError(f"Expected dirs of shape (N, 3), got {tuple(gaussian_dirs.shape)}")
+
+    # Normalize directions to be safe
+    dirs = torch.nn.functional.normalize(gaussian_dirs, dim=-1)
+    x, y, z = dirs[:, 0], dirs[:, 1], dirs[:, 2]
+    N = dirs.shape[0]
+
+    # Real SH constants up to degree 3 (total 16 bases)
+    c0 = 0.28209479177387814
+
+    c1 = 0.4886025119029199
+
+    c2_0 = 1.0925484305920792
+    c2_1 = 1.0925484305920792
+    c2_2 = 0.31539156525252005
+    c2_3 = 1.0925484305920792
+    c2_4 = 0.5462742152960396
+
+    c3_0 = 0.5900435899266435
+    c3_1 = 2.890611442640554
+    c3_2 = 0.4570457994644658
+    c3_3 = 0.3731763325901154
+    c3_4 = 0.4570457994644658
+    c3_5 = 1.445305721320277
+    c3_6 = 0.5900435899266435
+
+    # Build SH basis vector Y: (N, 16)
+    xx, yy, zz = x * x, y * y, z * z
+    xy, yz, xz = x * y, y * z, x * z
+
+    Y = torch.stack([
+        # l = 0 (1)
+        torch.full_like(x, c0),
+
+        # l = 1 (3)
+        -c1 * y,
+         c1 * z,
+        -c1 * x,
+
+        # l = 2 (5)
+         c2_0 * xy,
+        -c2_1 * yz,
+         c2_2 * (2.0 * zz - xx - yy),
+        -c2_3 * xz,
+         c2_4 * (xx - yy),
+
+        # l = 3 (7)
+        -c3_0 * y * (3.0 * xx - yy),
+         c3_1 * xy * z,
+        -c3_2 * y * (4.0 * zz - xx - yy),
+         c3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy),
+        -c3_4 * x * (4.0 * zz - xx - yy),
+         c3_5 * z * (xx - yy),
+        -c3_6 * x * (xx - 3.0 * yy),
+    ], dim=1)  # (N, 16)
+
+    # Reshape coefficients to (N, 16, 3) to match Y ordering
+    sh_dc = spherical_harmonics[:, 0:3]                 # (N, 3)
+    sh_rest = spherical_harmonics[:, 3:]                # (N, 45)
+    sh_rest = sh_rest.view(N, 15, 3)                    # (N, 15, 3)
+    sh = torch.cat([sh_dc.unsqueeze(1), sh_rest], dim=1)  # (N, 16, 3)
+
+    # Evaluate: sum_k Y_k * sh_k for each channel
+    colours = torch.einsum('nk,nkc->nc', Y, sh)         # (N, 3)
+
+    # Clamp to displayable range
+    colours = torch.clamp(colours, 0.0, 1.0)
+    return colours
 
     # Ensure tensor types/placement match directions
     device = gaussian_dirs.device

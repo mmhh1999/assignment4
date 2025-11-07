@@ -118,11 +118,14 @@ def run_training(args):
 
         # Compute loss
         # L1 loss; if mask is provided, compute masked L1
+        # Compute loss
         if gt_mask is not None:
-            # gt_mask likely shaped (H, W, 1); broadcast over channels
+            if gt_mask.shape[-1] == 1 and pred_img.shape[-1] == 3:
+                gt_mask = gt_mask.expand_as(pred_img)  # (H, W, 3)
             loss = torch.mean(torch.abs(pred_img - gt_img) * gt_mask)
         else:
             loss = torch.nn.functional.l1_loss(pred_img, gt_img)
+
 
         loss.backward()
         optimizer.step()

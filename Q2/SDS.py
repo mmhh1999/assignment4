@@ -41,7 +41,7 @@ class SDS:
 
         # Create model
         sd_pipe = StableDiffusionPipeline.from_pretrained(
-            sd_model_key, torch_dtype=self.precision_t
+            sd_model_key, dtype=self.precision_t  # <--- 修改 1 在这里
         ).to(device)
 
         self.vae = sd_pipe.vae
@@ -49,7 +49,7 @@ class SDS:
         self.text_encoder = sd_pipe.text_encoder
         self.unet = sd_pipe.unet
         self.scheduler = DDIMScheduler.from_pretrained(
-            sd_model_key, subfolder="scheduler", torch_dtype=self.precision_t
+            sd_model_key, subfolder="scheduler"
         )
         del sd_pipe
 
@@ -150,20 +150,36 @@ class SDS:
 
         # predict the noise residual with unet, NO grad!
         with torch.no_grad():
-            ### YOUR CODE HERE ###
- 
+            # sample noise and diffuse latents to timestep t
+            noise = torch.randn_like(latents)
+            latents_t = self.scheduler.add_noise(latents, noise, t)
+
+            # conditional prediction (positive prompt)
+            eps_cond = self.unet(
+                latents_t, t, encoder_hidden_states=text_embeddings
+            ).sample
 
             if text_embeddings_uncond is not None and guidance_scale != 1:
-                ### YOUR CODE HERE ###
-                pass
+                # classifier-free guidance: mix uncond & cond
+                eps_uncond = self.unet(
+                    latents_t, t, encoder_hidden_states=text_embeddings_uncond
+                ).sample
+                eps_pred = eps_uncond + guidance_scale * (eps_cond - eps_uncond)
+            else:
+                # no guidance
+                eps_pred = eps_cond
+
  
 
 
         # Compute SDS loss
-        w = 1 - self.alphas[t]
-        ### YOUR CODE HERE ###
+        # w(t) = 1 - alpha_bar_t  (stable choice for SDS)
+        w = 1.0 - self.alphas[t]               # (N,)
+        w = w.view(-1, 1, 1, 1)                # broadcast to NCHW
 
+        # grad wrt latents: grad_scale * w * (eps_pred - noise)
+        grad = grad_scale * w * (eps_pred - noise)
 
-        loss = 
-
+        # make a scalar whose gradient wrt latents equals `grad`
+        loss = (grad.detach() * latents).sum() / latents.shape[0]
         return loss

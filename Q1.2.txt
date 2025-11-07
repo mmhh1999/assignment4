@@ -39,3 +39,15 @@ LR scheduler	CosineAnnealingLR(T_max = num_itrs, eta_min = 1e-5)
 
 [*] Evaluation --- Mean PSNR: 19.011
 [*] Evaluation --- Mean SSIM: 0.790
+
+
+Parameter	learning rate
+opacities	0.001
+scales	0.003
+colours	0.02
+means	0.01
+Trained for 1000 iterations
+
+Mean PSNR: 29.811
+
+Mean SSIM: 0.939

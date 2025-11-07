@@ -68,8 +68,8 @@ class Gaussians:
         self.pre_act_opacities = data["pre_act_opacities"]
 
         # [Q 1.3.1] NOTE: Uncomment spherical harmonics code for question 1.3.1
-        # if data.get("spherical_harmonics") is not None:
-        #     self.spherical_harmonics = data["spherical_harmonics"]
+        if data.get("spherical_harmonics") is not None:
+            self.spherical_harmonics = data["spherical_harmonics"]
 
         if self.device == "cuda":
             self.to_cuda()
@@ -89,7 +89,7 @@ class Gaussians:
         data["colours"] = torch.tensor(ply_gaussians["dc_colours"])
 
         # [Q 1.3.1] NOTE: Uncomment spherical harmonics code for question 1.3.1
-        # data["spherical_harmonics"] = torch.tensor(ply_gaussians["sh"])
+        data["spherical_harmonics"] = torch.tensor(ply_gaussians["sh"])
 
         if data["pre_act_scales"].shape[1] != 3:
             raise NotImplementedError("Currently does not support isotropic")
@@ -212,7 +212,7 @@ class Gaussians:
         self.pre_act_opacities = self.pre_act_opacities.cuda()
 
         # [Q 1.3.1] NOTE: Uncomment spherical harmonics code for question 1.3.1
-        # self.spherical_harmonics = self.spherical_harmonics.cuda()
+        self.spherical_harmonics = self.spherical_harmonics.cuda()
 
     def compute_cov_3D(self, quats: torch.Tensor, scales: torch.Tensor):
         """
@@ -624,15 +624,15 @@ class Scene:
         means_3D = self.gaussians.means[idxs]
 
         # For questions 1.1, 1.2 and 1.3.2, use the below line of code for colours.
-        colours = self.gaussians.colours[idxs]
+        # colours = self.gaussians.colours[idxs]
 
         # [Q 1.3.1] For question 1.3.1, uncomment the below three lines to calculate the
         # colours instead of using self.gaussians.colours[idxs]. You may also comment
         # out the above line of code since it will be overwritten anyway.
 
-        # spherical_harmonics = self.gaussians.spherical_harmonics[idxs]
-        # gaussian_dirs = self.calculate_gaussian_directions(means_3D, camera)
-        # colours = colours_from_spherical_harmonics(spherical_harmonics, gaussian_dirs)
+        spherical_harmonics = self.gaussians.spherical_harmonics[idxs]
+        gaussian_dirs = self.calculate_gaussian_directions(means_3D, camera)
+        colours = colours_from_spherical_harmonics(spherical_harmonics, gaussian_dirs)
 
         # Apply activations
         quats, scales, opacities = self.gaussians.apply_activations(
@@ -647,16 +647,18 @@ class Scene:
             raise ValueError("Invalid setting of per_splat")
 
         # In this case we can directly splat all gaussians onto the image
+                
         if num_mini_batches == 1:
 
-            # Get image, depth and mask via splatting
-            image, depth, mask, _ = self.splat(
+            image, depth, mask, final_T = self.splat(
                 camera, means_3D, z_vals, quats, scales,
                 colours, opacities, img_size
             )
+            
+            image = image + final_T.permute(1, 2, 0) * bg_colour_
+            final_T_all = final_T
 
-        # In this case we splat per_splat number of gaussians per iteration. This makes
-        # the implementation more memory efficient but at the same time makes it slower.
+        
         else:
 
             W, H = img_size
@@ -675,23 +677,36 @@ class Scene:
                 means_3D_ = means_3D[b_idx * per_splat: (b_idx+1) * per_splat]
                 opacities_ = opacities[b_idx * per_splat: (b_idx+1) * per_splat]
 
-                # Get image, depth and mask via splatting
                 image_, depth_, mask_, start_transmittance = self.splat(
                     camera, means_3D_, z_vals_, quats_, scales_, colours_,
                     opacities_, img_size, start_transmittance
                 )
 
-                image = image + image_
-                depth = depth + depth_
-                mask = mask + mask_
+                image += image_
+                depth += depth_
+                mask  += mask_
 
-        image = mask * image + (1.0 - mask) * bg_colour_
+            final_T_all = start_transmittance
 
+        
+        image = image + final_T_all.permute(1, 2, 0) * bg_colour_
         return image, depth, mask
 
     def calculate_gaussian_directions(self, means_3D, camera):
         """
-        Temporarily disabled for Q1.2 (no SH computation needed)
+        Return normalized view directions from Gaussian positions to the camera center.
+        Args:
+            means_3D: (N,3)
+            camera: PerspectiveCameras
+        Returns:
+            (N,3) tensor of unit directions
         """
-        return None
+        cam_center = camera.get_camera_center()  # (1,3) or (B,3)
+        if cam_center.dim() == 2:
+            cam_center = cam_center[0]
+        cam_center = cam_center.to(means_3D.device).expand_as(means_3D)  # (N,3)
+        # direction from point to camera
+        view_dirs = torch.nn.functional.normalize(cam_center - means_3D, dim=-1)
+        return view_dirs
+
 
