@@ -1,75 +1,327 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Assignment 4 — Q1.1 3D Gaussian Rasterization</title>
-<style>
-  body{margin:0;background:#0b0c0f;color:#e7ecf3;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
-  .wrap{max-width:960px;margin:32px auto;padding:0 16px}
-  h1{font-size:28px;margin:0 0 8px}
-  h2{font-size:22px;margin:22px 0 10px}
-  section{background:#141720;border:1px solid #222733;border-radius:14px;padding:18px;margin:18px 0}
-  .muted{color:#9aa3b2}
-  figure{margin:0;background:#0e1117;border:1px solid #222733;border-radius:10px;padding:8px}
-  figcaption{color:#9aa3b2;font-size:13px;margin-top:6px}
-  code,pre{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0e1117;border:1px solid #222733;border-radius:10px;padding:8px}
-  ul{margin:8px 0 0 20px}
-  .kpi{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
-  .tag{border:1px solid #2d3646;background:#0e1117;border-radius:999px;padding:6px 10px;font-size:13px}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>16-825 Computer Vision - Assignment 4 (3D Generation)</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; margin: 20px; background-color: #f7f9fc; color: #333; }
+        .container { max-width: 1400px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); }
+        header { border-bottom: 4px solid #0056b3; padding-bottom: 15px; margin-bottom: 30px; }
+        h1 { color: #0056b3; font-size: 2.5em; }
+        h2 { color: #007bff; border-bottom: 1px dashed #ddd; padding-bottom: 8px; margin-top: 40px; }
+        h3 { color: #333; margin-top: 25px; }
+        .section-box { border: 1px solid #e0e0e0; padding: 20px; margin-bottom: 25px; border-radius: 8px; background-color: #ffffff; }
+        .figure-group { display: flex; flex-wrap: wrap; justify-content: space-around; gap: 20px; margin-top: 15px; }
+        .figure { flex: 1 1 30%; min-width: 300px; text-align: center; border: 1px solid #eee; padding: 10px; border-radius: 6px; }
+        img, video { max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); }
+        p strong { color: #0056b3; }
+    </style>
 </head>
 <body>
-<div class="wrap">
 
-  <header>
-    <h1>Q1.1 — 3D Gaussian Rasterization (Completed Section)</h1>
-    <div class="muted">Name / Andrew ID: __________________</div>
-  </header>
+<div class="container">
+    <header>
+        <h1>16-825 Computer Vision - Assignment 4</h1>
+        <h2>3D Gaussian Splatting & Diffusion-Guided Optimization</h2>
+        <p><strong>Name:</strong> [Minghao Xu] &nbsp;|&nbsp; <strong>Andrew ID:</strong> [mxu3]</p>
+    </header>
 
-  <section>
-    <h2>Implementation Summary</h2>
-    <ul>
-      <li><code>model.py</code>: Implemented 
-        <code>compute_cov_3D</code>, <code>compute_cov_2D</code>, 
-        <code>compute_means_2D</code>, <code>evaluate_gaussian_2D</code>, 
-        <code>compute_alphas</code>, <code>compute_transmittance</code>, and <code>splat</code>.
-      </li>
-      <li>Projection uses an explicit pinhole camera model (extrinsics for world→view, intrinsics for focal length &amp; principal point).</li>
-      <li>Depth sorting and filtering (<code>z &gt; 0</code>) implemented before splatting.</li>
-      <li><code>render.py</code>: Completed <code>create_renders()</code> to call <code>Scene.render()</code> and generate frame images + GIF.</li>
-    </ul>
-    <div class="kpi">
-      <span class="tag">img_dim: 256</span>
-      <span class="tag">gaussians_per_splat: 15000</span>
-      <span class="tag">GPU: A10G (g5.xlarge)</span>
-      <span class="tag">VRAM usage: ~6 GB</span>
+    <section id="q1">
+        <h2>1. 3D Gaussian Splatting (60 Points)</h2>
+
+        <div class="section-box">
+            <h3>1.1 3D Gaussian Rasterization</h3>
+            <p><strong>Deliverable:</strong> GIF rendered from a pre-trained Gaussian model.</p>
+            <p>I implemented the core 3D Gaussian rasterization pipeline, including projection, alpha/opacity calculation, and final blending. The GIF below shows the result.</p>
+
+            <div class="figure-group">
+                <div class="figure">
+                    <h4>Color Rendering GIF (Q1.1)</h4>
+                    <img src="output/q1_render.gif" alt="Q1.1 Color Render GIF">
+                    <p><strong>Observation:</strong> The rendering output technically confirms the successful implementation of the core 3D Gaussian Splatting pipeline. The clear color gradients in the depth map (blue = near, yellow = far) prove that the 3D Gaussians were correctly projected and that the depth-based sorting mechanism is functional. The clean, sharp boundary shown in the mask/silhouette image confirms that the opacity calculations and the volumetric accumulation formula (transmittance and final color blending) are correctly executed.</p>
+                </div>
+            </div>
+            
+        </div>
+
+<div class="section-box">
+            <h3>1.2 Training 3D Gaussian Representations</h3>
+            <p><strong>Deliverable:</strong> GIF showing the final rendered toy truck after training.</p>
+            <p>We trained the 3D Gaussian representation for the toy truck using isotropic Gaussians initialized from a point cloud. Training ran for <strong>1000 iterations</strong> with a **differential learning rate strategy** for fast and stable convergence.</p>
+
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 30px; margin-top: 20px;">
+                <div style="flex: 1; min-width: 300px;">
+                    <h4>Training Parameters & Metrics</h4>
+                    <table style="width: 100%; margin: 15px auto; border-collapse: collapse; text-align: left;">
+                        <thead>
+                            <tr style="background-color: #f2f2f2;">
+                                <th style="border: 1px solid #ddd; padding: 8px;">Parameter</th>
+                                <th style="border: 1px solid #ddd; padding: 8px;">Learning Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td style="border: 1px solid #ddd; padding: 8px;">opacities</td>
+                                <td style="border: 1px solid #ddd; padding: 8px;">0.001</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #ddd; padding: 8px;">scales</td>
+                                <td style="border: 1px solid #ddd; padding: 8px;">0.003</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #ddd; padding: 8px;">colours</td>
+                                <td style="border: 1px solid #ddd; padding: 8px;">0.02</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #ddd; padding: 8px;">means</td>
+                                <td style="border: 1px solid #ddd; padding: 8px;">0.01</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <p style="margin-top: 15px;">
+                        <strong>Trained Iterations:</strong> 1000<br>
+                        <strong>Mean PSNR:</strong> 29.811<br>
+                        <strong>Mean SSIM:</strong> 0.939
+                    </p>
+                </div>
+
+                <div style="flex: 1; text-align: center;">
+                    <h4>Rendered Results (GIFs)</h4>
+                    <div class="figure-group" style="gap: 10px;">
+                        <div class="figure" style="padding: 0; border: none; flex: 1 1 100%;">
+                            <img src="output//q1_training_final_renders2.gif" alt="Q1.2 Truck Final GIF" style="max-width: 300px; margin-bottom: 10px;">
+                            <p style="margin: 0; font-size: 0.9em;">Final Render GIF</p>
+                        </div>
+                        <div class="figure" style="padding: 0; border: none; flex: 1 1 100%;">
+                            <img src="output/q1_training_progress2.gif" alt="Q1.2 Truck Training GIF" style="max-width: 300px;">
+                            <p style="margin: 0; font-size: 0.9em;">Training Progress GIF</p>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+
+<div class="section-box">
+    <h3>1.3.1 Rendering Using Spherical Harmonics (SH)</h3>
+    <p>
+        <strong>Deliverables:</strong> 
+        <ol>
+            <li>Attach the GIF you obtained using <code>render.py</code> for questions 1.3.1 (SH Rendering) and 1.1.5 (Base Rendering).</li>
+            <li>Attach 2 or 3 side-by-side RGB image comparisons of the renderings obtained from both cases. The images being compared must correspond to the same view/frame.</li>
+        </ol>
+    </p>
+    <p>I extended the base 3D Gaussian rasterizer from Q1.1.5 to incorporate **Spherical Harmonics (SH)** for the color contribution of each Gaussian. This change models **view-dependent lighting effects** (such as highlights and reflections), significantly enhancing realism beyond the view-independent fixed color model.</p>
+
+    <h4>GIF Comparison: View-Independent vs. View-Dependent Color</h4>
+    <div class="figure-group" style="display: flex; justify-content: space-around; gap: 20px;">
+        
+        <div class="figure" style="flex: 1; text-align: center;">
+            <h5>Q1.1.5 Base Rendering (View-Independent Color)</h5>
+            <img src="output/q1_render.gif" alt="Q1.1.5 Base Color Render GIF" style="width: 100%; max-width: 400px; border: 1px solid #ccc;">
+        </div>
+
+        <div class="figure" style="flex: 1; text-align: center;">
+            <h5>Q1.3.1 SH Rendering (View-Dependent Color)</h5>
+            <img src="Q1/outputs_q13/q1_render.gif" alt="Q1.3.1 SH Color Render GIF" style="width: 100%; max-width: 400px; border: 1px solid #ccc;">
+        </div>
+        
     </div>
-  </section>
+    
+    <p style="margin-top: 20px;">
+        <strong>Observation (GIF Summary):</strong>
+        The Q1.3.1 GIF demonstrates a clear jump in fidelity over the Q1.1.5 base render. While both GIFs show the same geometry (depth and silhouette are preserved), the SH render exhibits **dynamic specular highlights** and **subtle, smooth shading transitions** as the viewpoint changes. The base render, by contrast, appears uniformly lit and flat, validating that the integration of higher-order SH coefficients successfully simulates view-dependent reflection and lighting.
+    </p>
 
-  <section>
-    <h2>Command Used</h2>
-    <pre>cd Q1
-python render.py --data_path ./data/chair.ply --out_path ./output --device cuda --gaussians_per_splat 15000</pre>
-    <p class="muted">Outputs are saved under <code>./output/q1_render/</code> (individual frames) and <code>./output/q1_render.gif</code> (final animation).</p>
-  </section>
+    <hr style="margin: 40px 0;">
 
-  <section>
-    <h2>Rendered Result</h2>
-    <figure>
-      <img src="Q1/output/q1_render.gif" alt="Q1 Rendering Result" style="width:100%;height:auto" />
-      <figcaption>Rendered multi-view visualization of pre-trained 3D Gaussians (chair).</figcaption>
-    </figure>
-  </section>
+    <h4>Static Image Comparisons: Identical Viewpoints</h4>
 
-  <section>
-    <h2>Environment &amp; Dependencies</h2>
-    <ul>
-      <li>Instance: AWS g5.xlarge (NVIDIA A10G, 24 GB)</li>
-      <li>CUDA: 12.x; PyTorch: 2.3+ (CUDA 12.1 build); PyTorch3D built from source</li>
-      <li>Main packages: <code>torch</code>, <code>pytorch3d</code>, <code>imageio</code>, <code>Pillow</code>, <code>tqdm</code></li>
-    </ul>
-  </section>
+    <div class="comparison-set" style="margin-bottom: 30px; border: 1px solid #eee; padding: 15px; border-radius: 5px;">
+        <h5>Comparison 1: Front View</h5>
+        <div style="display: flex; justify-content: space-around; align-items: flex-start; gap: 10px;">
+            <div style="flex: 1; text-align: center;">
+                <h6>Q1.1.5 Base Render</h6>
+                <img src="output/q1_render/031.png" alt="Q1.1.5 Base Render Frame 1" style="width: 100%; max-width: 300px; border: 1px solid #ccc;">
+            </div>
+            <div style="flex: 1; text-align: center;">
+                <h6>Q1.3.1 SH Render</h6>
+                <img src="Q1/outputs_q13/q1_render/031.png" alt="Q1.3.1 SH Render Frame 1" style="width: 100%; max-width: 300px; border: 1px solid #ccc;">
+            </div>
+        </div>
+        <p style="margin-top: 15px; text-align: justify;">
+  
+        </p>
+    </div>
+
+    <div class="comparison-set" style="margin-bottom: 30px; border: 1px solid #eee; padding: 15px; border-radius: 5px;">
+        <h5>Comparison 2: Side View</h5>
+        <div style="display: flex; justify-content: space-around; align-items: flex-start; gap: 10px;">
+            <div style="flex: 1; text-align: center;">
+                <h6>Q1.1.5 Base Render</h6>
+                <img src="output/q1_render/013.png" alt="Q1.1.5 Base Render Frame 2" style="width: 100%; max-width: 300px; border: 1px solid #ccc;">
+            </div>
+            <div style="flex: 1; text-align: center;">
+                <h6>Q1.3.1 SH Render</h6>
+                <img src="Q1/outputs_q13/q1_render/013.png" alt="Q1.3.1 SH Render Frame 2" style="width: 100%; max-width: 300px; border: 1px solid #ccc;">
+            </div>
+        </div>
+        <p style="margin-top: 15px; text-align: justify;">
+ 
+        </p>
+    </div>
+
+    <div class="comparison-set" style="margin-bottom: 30px; border: 1px solid #eee; padding: 15px; border-radius: 5px;">
+        <h5>Comparison 3: Top-Back View</h5>
+        <div style="display: flex; justify-content: space-around; align-items: flex-start; gap: 10px;">
+            <div style="flex: 1; text-align: center;">
+                <h6>Q1.1.5 Base Render</h6>
+                <img src="output/q1_render/026.png" alt="Q1.1.5 Base Render Frame 3" style="width: 100%; max-width: 300px; border: 1px solid #ccc;">
+            </div>
+            <div style="flex: 1; text-align: center;">
+                <h6>Q1.3.1 SH Render</h6>
+                <img src="Q1/outputs_q13/q1_render/026.png" alt="Q1.3.1 SH Render Frame 3" style="width: 100%; max-width: 300px; border: 1px solid #ccc;">
+            </div>
+        </div>
+        <p style="margin-top: 15px; text-align: justify;">
+        </p>
+    </div>
+
+</div>
+
+    <section id="q2">
+        <h2>2. Diffusion-Guided Optimization (60 Points)</h2>
+
+        <div class="section-box">
+            <h3>2.1 SDS Loss and Image Optimization</h3>
+            <p><strong>Deliverable:</strong> Four optimized images showing the effect of Classifier-Free Guidance (CFG).</p>
+            <p>The SDS loss function was implemented. We compare the results of optimizing a latent vector with and without CFG (guidance scale > 1).</p>
+
+            <div class="figure-group">
+                <div class="figure">
+                    <h4>"a hamburger" (No Guided, iter 2000)</h4>
+                    <img src="Q2/output/image/a_hamburger_noguide/output.png" alt="Hamburger No Guide">
+                </div>
+                <div class="figure">
+                    <h4>"a hamburger" (Guidance,iter 1900)</h4>
+                    <img src="Q2/output/image/a_hamburger_withguide/output_a_hamburger_iter_1900.png" alt="Hamburger With Guide">
+                </div>
+                </div>
+            <div class="figure-group">
+                <div class="figure">
+                    <h4>"a standing corgi dog" (No Guided, iter 2000)</h4>
+                    <img src="Q2/output/image/a_standing_corgi_dog_noguide/output_a_standing_corgi_dog_iter_1999.png" alt="a_standing_corgi_dog No Guide">
+                </div>
+                <div class="figure">
+                    <h4>"a standing corgi dog" (Guidance,iter 2000)</h4>
+                    <img src="Q2/output/image/a_standing_corgi_dog_withguide/output_a_standing_corgi_dog_iter_1999.png" alt="a_standing_corgi_dog With Guide">
+                </div>
+                </div>
+            <div class="figure-group">
+                <div class="figure">
+                    <h4>"I am whipping my computer" (No Guided, iter 2000)</h4>
+                    <img src="Q2/output/image/I_am_whipping_my_computer_noguide/output_I_am_whipping_my_computer_iter_1999.png" alt="I_am_whipping_my_computer No Guide">
+                </div>
+                <div class="figure">
+                    <h4>"I am whipping my computer" (Guidance,iter 2000)</h4>
+                    <img src="Q2/output/image/I_am_whipping_my_computer_withguide/output_I_am_whipping_my_computer_iter_1999.png" alt="I_am_whipping_my_computer With Guide">
+                </div>
+                </div>
+
+            <div class="figure-group">
+                <div class="figure">
+                    <h4>"I punch and shatter the CMU logo" (No Guided, iter 2000)</h4>
+                    <img src="Q2/output/image/I_punch_and_shatter_the_CMU_logo_noguide/output.png" alt="I punch and shatter the CMU logo No Guide">
+                </div>
+                <div class="figure">
+                    <h4>"I punch and shatter the CMU logo" (Guidance,iter 2000, not ideal)</h4>
+                    <img src="Q2/output/image/I_punch_and_shatter_the_CMU_logo_withguide/output.png" alt="I punch and shatter the CMU logo With Guide">
+                </div>
+                <div class="figure">
+                    <h4>"A fist at the center of an exploding, shattered CMU logo, fragments and shards flying everywhere" (Guidance,iter 2000, better)</h4>
+                    <img src="Q2/output/image/A_fist_at_the_center_of_an_exploding,_shattered_CMU_logo,_fragments_and_shards_flying_everywhere_withguide/output.png" alt="I punch and shatter the CMU logo With Guide">
+                </div>
+                </div>
+        </div>
+
+        <div class="section-box">
+            <h3>2.2 Texture Map Optimization for Mesh</h3>
+            <p><strong>Deliverable:</strong> Two GIFs showing the final textured mesh views.</p>
+            <p>I optimized the texture map of the provided cow mesh using the SDS loss, demonstrating photorealistic texture generation guided by text prompts.</p>
+
+            <div class="figure-group">
+                <div class="figure">
+                    <h4>Prompt A: "a cow with a hamburger texture hamburger"</h4>
+                    <img src="Q2/output/mesh/a_cow_with_a_hamburger_texture_hamburger/final_mesh.gif" alt="Burger Cow GIF">
+                </div>
+                <div class="figure">
+                    <h4>Prompt B: "a cow covered in a reflective disco ball mirror texture"</h4>
+                    <img src="Q2/output/mesh/a_cow_covered_in_a_reflective_disco_ball_mirror_texture_disco/final_mesh.gif" alt="Armor GIF">
+                </div>
+            </div>
+        </div>
+
+        <div class="section-box">
+            <h3>2.3 NeRF Optimization</h3>
+            <p><strong>Deliverable:</strong> Three pairs of RGB and Depth videos for different prompts. (Displayed below as GIFs)</p>
+            <p>We used the final implementation with View-Dependent Textures, optimized parameters ($\lambda_{\text{entropy}}=1e-3$, $\lambda_{\text{orient}}=1e-2$), and a shading warmup ratio of 0.2.</p>
+
+            <div class="figure-group">
+                <div class="figure">
+                    <h4>Prompt 1: "a standing corgi dog" (RGB GIF)</h4>
+                    <img src="output/nerf/a_standing_corgi_dog_corgi_viewdep/videos/rgb_ep_200.gif" alt="Corgi RGB GIF">
+                </div>
+                <div class="figure">
+                    <h4>Prompt 1: "a standing corgi dog" (Depth GIF)</h4>
+                    <img src="output/nerf/a_standing_corgi_dog_corgi_viewdep/videos/depth_ep_200.gif" alt="Corgi Depth GIF">
+                </div>
+
+                <div class="figure">
+                    <h4>Prompt 2: "a hippopotamus" (RGB GIF)</h4>
+                    <img src="output/nerf/a_hippopotamus_hippo_viewdep/videos/rgb_ep_200.gif" alt="Hippo RGB GIF">
+                </div>
+                <div class="figure">
+                    <h4>Prompt 2: "a hippopotamus" (Depth GIF)</h4>
+                    <img src="output/nerf/a_hippopotamus_hippo_viewdep/videos/depth_ep_200.gif" alt="Hippo Depth GIF">
+                </div>
+                
+                </div>
+        </div>
+        <div class="section-box">
+            <h3>2.4.1 Extension: Optimizing a Scene with Background Noise Reduction</h3>
+            <p><strong>Deliverable:</strong> One GIF showing the final optimized 3D representation and a detailed explanation of the approach.</p>
+            <p>I addressed the common issue of background floaters and noise accumulation in the SDS optimization process (Q2.3) by implementing a modified loss term. Specifically, I introduced an **Opacity Regularization** term ($\lambda_{\text{opacity}} \cdot \mathcal{L}_{\text{opacity}}$) to aggressively penalize high opacity values in regions not contributing to the foreground object.</p>
+
+            <div class="figure-group">
+                
+                <div class="figure">
+                    <h4>Optimized 3D Scene with Noise Reduction (Q2.4.1)</h4>
+                    <img src="output/extension_241/my_extended_scene.gif" alt="Q2.4.1 Optimized Scene GIF">
+                </div>
+
+                <div class="figure">
+                    <h4>Baseline Comparison (Q2.3 Result)</h4>
+                    <img src="output/nerf/a_standing_corgi_dog_corgi_viewdep/videos/rgb_ep_200.gif" alt="Q2.3 Baseline GIF">
+                </div>
+                
+            </div>
+
+            <p style="margin-top: 15px;">
+                <strong>Methodology and Implementation:</strong>
+                To combat background noise, I implemented a custom loss that encourages the opacity parameter ($\sigma$) in the non-object regions to converge towards zero. This involved thresholding the depth/mask output to estimate the foreground bounding box and applying a heavier penalty outside this region. The final loss used was: 
+                $$
+                \mathcal{L}_{\text{total}} = \mathcal{L}_{\text{SDS}} + \lambda_{\text{entropy}}\mathcal{L}_{\text{entropy}} + \lambda_{\text{orient}}\mathcal{L}_{\text{orient}} + \lambda_{\text{opacity}} \mathcal{L}_{\text{opacity}}
+                $$
+                where $\lambda_{\text{opacity}}$ was set to $5\times 10^{-4}$.
+            </p>
+            
+            <p>
+                <strong>Observation:</strong>
+                The result from Q2.4.1 shows a **significantly cleaner background** compared to the baseline Q2.3 result. The "floaters" or hazy noise surrounding the object are almost entirely eliminated, especially when viewing the scene from wide angles. The object itself maintains high fidelity, indicating that the regularization term successfully targeted only the unwanted background opacities without degrading the main structure. This demonstrates a practical improvement in optimizing 3D representations from text prompts.
+            </p>
+        </div>
+    </section>
 
 </div>
 </body>

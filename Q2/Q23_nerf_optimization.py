@@ -28,30 +28,14 @@ def optimize_nerf(
     Optimize the view for a NeRF model to match the prompt.
     """
 
-    # --- [START] --- 修复 1: 替换 prepare_embeddings ---
     # Step 1. Create text embeddings from prompt
-    # 我们绕过 'prepare_embeddings' (来自 utils.py)，因为它不可靠。
-    # 我们将直接调用 'sds.get_text_embeddings()'，它需要一个 *列表* (list)。
+    # NOTE: This line requires the external 'prepare_embeddings' to work correctly.
+    embeddings = prepare_embeddings(sds, prompt, neg_prompt, view_dependent=args.view_dep_text)
     
-    # 'prompt' 是一个字符串, 'neg_prompt' 也是
-    # (注意：这个脚本依赖 'embeddings["uncond"]' 和 'embeddings["default"]')
-    # 'view_dep_text' 模式会添加 "front", "side", "back"
-    
-    embeddings = {}
-    embeddings["uncond"] = sds.get_text_embeddings([neg_prompt])
-    
-    if args.view_dep_text:
-        # 为 6 个视角生成 embeddings
-        embeddings["front"] = sds.get_text_embeddings([f"{prompt}, front view"])
-        embeddings["side"] = sds.get_text_embeddings([f"{prompt}, side view"])
-        embeddings["back"] = sds.get_text_embeddings([f"{prompt}, back view"])
-        # 'default' 只是一个备用, 尽管在 view_dep 模式下它可能不被使用
-        embeddings["default"] = sds.get_text_embeddings([prompt])
-    else:
-        # 如果不使用视角依赖，"default" 就是我们的主要 prompt
-        embeddings["default"] = sds.get_text_embeddings([prompt])
-        
-    # --- [END] --- 修复 1 结束 ---
+    # Move text encoder to CPU to free VRAM (Standard DreamFusion/SDS practice)
+    sds.text_encoder.to("cpu")
+    torch.cuda.empty_cache()
+
 
     # Step 2. Set up NeRF model
     model = NeRFNetwork(args).to(device)
@@ -176,37 +160,44 @@ def optimize_nerf(
             # interpolate text_z
             azimuth = data["azimuth"]  # [-180, 180]
             assert azimuth.shape[0] == 1, "Batch size should be 1"
-            
-            # 确保 embeddings 在正确的设备上
-            text_uncond = embeddings["uncond"].to(device)
+            text_uncond = embeddings["uncond"].to(device) # Move to device
 
             if not args.view_dep_text:
-                text_cond = embeddings["default"].to(device)
+                text_cond = embeddings["default"].to(device) # Move to device
             else:
-                ### YOUR CODE HERE ###
-                # 根据 azimuth (方位角) 选择正确的 embedding
+                ### YOUR CODE HERE ### (修复：实现视角依赖的 Prompt 逻辑)
                 azimuth_deg = azimuth[0].item()
                 
-                if (azimuth_deg >= -60 and azimuth_deg <= 60) or \
-                   (azimuth_deg >= 300 or azimuth_deg <= -300): # 假设 0 度是 "front"
-                    text_cond = embeddings["front"].to(device)
-                elif (azimuth_deg >= 120 or azimuth_deg <= -240) or \
-                     (azimuth_deg <= -120 and azimuth_deg >= -240): # 假设 180/-180 度是 "back"
-                    text_cond = embeddings["back"].to(device)
-                else: # 其他都是 "side"
-                    text_cond = embeddings["side"].to(device)
+                # DreamFusion heuristic: 
+                # Front: -60 to 60 deg 
+                if (azimuth_deg >= -60 and azimuth_deg <= 60):
+                    text_key = "front"
+                # Back: 120 to 240 deg (or outside this range when normalized to -180 to 180)
+                elif (azimuth_deg >= 120 and azimuth_deg <= 240) or (azimuth_deg < -120 and azimuth_deg > -240):
+                    text_key = "back"
+                else:
+                    text_key = "side"
+                
+                # Check if the needed embedding exists (it should, if prepare_embeddings worked)
+                if text_key in embeddings:
+                    text_cond = embeddings[text_key].to(device)
+                else:
+                    # Fallback to default if the specific key is missing (safe coding practice)
+                    text_cond = embeddings["default"].to(device)
+            ### END YOUR CODE HERE ###
 
   
-            ### YOUR CODE HERE ###
+            ### YOUR CODE HERE ### (填充核心的 SDS Loss 计算)
             # 1. 将 NeRF 渲染的 RGB 图像编码为 latents
             latents = sds.encode_imgs(pred_rgb) 
             
-            # 2. 计算 SDS loss
+            # 2. 计算 SDS loss (强制使用 guidance_scale=100)
+            # NOTE: We assume text_uncond exists and use guidance scale 100 for best results.
             loss = sds.sds_loss(
                 latents=latents,
                 text_embeddings=text_cond,
                 text_embeddings_uncond=text_uncond,
-                guidance_scale=100, # 总是使用强指导
+                guidance_scale=100,
                 grad_scale=1.0,
             )
             ### END YOUR CODE HERE ###
@@ -279,8 +270,13 @@ def optimize_nerf(
                     B, N = rays_o.shape[:2]
                     H, W = data["H"], data["W"]
 
-                    if bg_color is not None:
+                    # NOTE: bg_color is defined outside the test loop, so we assume its available
+                    if 'bg_color' in data:
+                        bg_color = data['bg_color'].to(rays_o.device)
+                    elif 'bg_color' in locals():
                         bg_color = bg_color.to(rays_o.device)
+                    else:
+                        bg_color = None
 
                     shading = data["shading"] if "shading" in data else "albedo"
                     ambient_ratio = (
@@ -343,18 +339,14 @@ if __name__ == "__main__":
     parser.add_argument("--loss_scaling", type=int, default=1)
 
     ### YOUR CODE HERE ###
-    # 你需要调整以下参数以获得好的 NeRF 结果
-    
-    # --- [START] --- 填充 Q2.3 的超参数 ---
-    # 根据 README 提示，我们设置合理的默认值
-    
+    # You wil need to tune the following parameters to obtain good NeRF results
     ### regularizations
+    # (根据 README 提示，设置合理的默认值)
     parser.add_argument('--lambda_entropy', type=float, default=1e-3, help="loss scale for alpha entropy")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
     ### shading options
+    # (设置 20% 的迭代次数使用 normal shading 作为几何体初始化的 Warmup)
     parser.add_argument('--latent_iter_ratio', type=float, default=0.2, help="training iters that only use albedo shading")
-    
-    # --- [END] --- Q2.3 超参数填充结束 ---
 
 
     parser.add_argument(
@@ -363,7 +355,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--view_dep_text",
         type=int,
-        default=0, # 默认关闭视角依赖
+        default=1, # 默认开启视角依赖 (View-Dep) 获得最佳结果
         help="option to use view dependent text embeddings for nerf optimization",
     )
     parser = add_config_arguments(
@@ -379,12 +371,8 @@ if __name__ == "__main__":
     output_dir = os.path.join(
         args.output_dir, args.prompt.replace(" ", "_") + args.postfix
     )
-    
-    # --- [START] --- 修复 2: 修复 Python 2 'exist_OK' bug ---
-    # 原始代码: os.makedirs(output_dir, exist_ok=True)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    # --- [END] --- 修复 2 结束 ---
+    # NOTE: Assuming os.makedirs(..., exist_ok=True) works in the AWS environment
+    os.makedirs(output_dir, exist_ok=True)
 
     # initialize SDS
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
